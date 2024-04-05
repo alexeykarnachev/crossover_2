@@ -8,6 +8,6 @@
 // -----------------------------------------------------------------------
 // main
 int main() {
-    Game game({SCREEN_WIDTH, SCREEN_HEIGHT});
+    Game game(SCREEN_WIDTH, SCREEN_HEIGHT);
     game.run();
 }

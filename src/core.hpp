@@ -1,6 +1,8 @@
 #pragma once
 
 #include "box2d/b2_collision.h"
+#include "box2d/b2_math.h"
+#include <tuple>
 #include <vector>
 #include "box2d/b2_body.h"
 #include "box2d/b2_world.h"
@@ -8,6 +10,7 @@
 
 class Game;
 class Dude;
+class Eyes;
 class GameCamera;
 
 // -----------------------------------------------------------------------
@@ -19,7 +22,7 @@ class GameCamera {
 
   public:
     GameCamera();
-    GameCamera(Vector2 screen_size);
+    GameCamera(int screen_width, int screen_height);
     void begin_mode_2d();
     void end_mode_2d();
 };
@@ -29,14 +32,23 @@ class GameCamera {
 class Dude {
 private:
     b2Body* body;
+
     float speed;
 
+    // eyes
+    int n_view_rays;
+    float view_angle;
+    float view_distance;
+
 public:
-    Dude(b2Body* body, float speed);
+    Dude(b2Body* body, float speed, int n_view_rays, float view_angle, float view_distance);
     void update(Game& game);
 
-    Vector2 get_body_position();
+    b2Vec2 get_body_position();
     float get_body_radius();
+    float get_body_angle();
+
+    std::vector<b2Vec2> get_view_ray_end_points();
 };
 
 // -----------------------------------------------------------------------
@@ -60,10 +72,10 @@ class Game {
     void draw_imgui();
 
   public:
-    Game(Vector2 screen_size);
+    Game(int screen_width, int screen_height);
     ~Game();
     void run();
 
-    void spawn_dude(float x, float y, float speed);
+    void spawn_dude(b2Vec2 position);
 };
 

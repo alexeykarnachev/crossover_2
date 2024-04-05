@@ -3,6 +3,7 @@
 #include "GLFW/glfw3.h"
 #include "box2d/b2_circle_shape.h"
 #include "box2d/b2_fixture.h"
+#include "box2d/b2_math.h"
 #include "box2d/b2_polygon_shape.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -15,10 +16,12 @@
 // game camera
 GameCamera::GameCamera(){};
 
-GameCamera::GameCamera(Vector2 screen_size) {
-    Vector2 offset = Vector2Scale(screen_size, 0.5);
+GameCamera::GameCamera(int screen_width, int screen_height) {
     this->camera2d = {
-        .offset = offset, .target = {0.0, 0.0}, .rotation = 180.0, .zoom = this->zoom};
+        .offset = {0.5f * screen_width, 0.5f * screen_height},
+        .target = {0.0, 0.0},
+        .rotation = 180.0,
+        .zoom = this->zoom};
 }
 
 void GameCamera::begin_mode_2d() {
@@ -31,17 +34,26 @@ void GameCamera::end_mode_2d() {
 
 // -----------------------------------------------------------------------
 // dude
-Dude::Dude(b2Body *body, float speed)
+Dude::Dude(
+    b2Body *body, float speed, int n_view_rays, float view_angle, float view_distance
+)
     : body(body)
+    , n_view_rays(n_view_rays)
+    , view_angle(view_angle)
+    , view_distance(view_distance)
     , speed(speed){};
 
 void Dude::update(Game &game) {
     this->body->SetLinearVelocity({0.0f, this->speed});
+    this->body->SetAngularVelocity(180.0 * DEG2RAD);
 }
 
-Vector2 Dude::get_body_position() {
-    b2Vec2 b2_vec2 = this->body->GetPosition();
-    return {b2_vec2.x, b2_vec2.y};
+b2Vec2 Dude::get_body_position() {
+    return this->body->GetPosition();
+}
+
+float Dude::get_body_angle() {
+    return this->body->GetAngle();
 }
 
 float Dude::get_body_radius() {
@@ -51,15 +63,36 @@ float Dude::get_body_radius() {
     return circle->m_radius;
 }
 
+std::vector<b2Vec2> Dude::get_view_ray_end_points() {
+    std::vector<b2Vec2> rays;
+
+    b2Vec2 origin = this->get_body_position();
+    float angle = this->get_body_angle();
+    Vector2 first_ray = Vector2Rotate({0.0, this->view_distance}, angle);
+
+    if (this->n_view_rays == 1) {
+        rays.push_back({first_ray.x + origin.x, first_ray.y + origin.y});
+    } else {
+        float step = this->view_angle / (this->n_view_rays - 1);
+        for (int i = 0; i < this->n_view_rays; ++i) {
+            float angle = -0.5 * this->view_angle + i * step;
+            Vector2 ray = Vector2Rotate(first_ray, angle);
+            rays.push_back({ray.x + origin.x, ray.y + origin.y});
+        }
+    }
+
+    return rays;
+}
+
 // -----------------------------------------------------------------------
 // game
-Game::Game(Vector2 screen_size)
+Game::Game(int screen_width, int screen_height)
     : b2_world({0.0f, 0.0f}) {
 
     // init raylib window
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     SetTargetFPS(60);
-    InitWindow(screen_size.x, screen_size.y, "crossover_2");
+    InitWindow(screen_width, screen_height, "crossover_2");
 
     // init imgui
     IMGUI_CHECKVERSION();
@@ -70,7 +103,7 @@ Game::Game(Vector2 screen_size)
     ImGui_ImplOpenGL3_Init("#version 420 core");
     ImGui::StyleColorsDark();
 
-    this->camera = GameCamera(screen_size);
+    this->camera = GameCamera(screen_width, screen_height);
 }
 
 Game::~Game() {
@@ -118,9 +151,13 @@ void Game::draw_world() {
 
     // draw dudes
     for (Dude &dude : this->dudes) {
-        Vector2 position = dude.get_body_position();
+        b2Vec2 position = dude.get_body_position();
         float radius = dude.get_body_radius();
-        DrawCircleV(position, radius, RED);
+        DrawCircleV({position.x, position.y}, radius, RED);
+
+        for (auto point : dude.get_view_ray_end_points()) {
+            DrawLineV({position.x, position.y}, {point.x, point.y}, GREEN);
+        }
     }
 
     this->camera.end_mode_2d();
@@ -144,8 +181,7 @@ void Game::draw_imgui() {
 }
 
 void Game::run() {
-    this->spawn_dude(0.0, 0.0, 2.0);
-    this->spawn_dude(0.0, 5.0, -2.0);
+    this->spawn_dude({0.0, 0.0});
 
     while (!WindowShouldClose()) {
         this->update();
@@ -153,11 +189,11 @@ void Game::run() {
     }
 }
 
-void Game::spawn_dude(float x, float y, float speed) {
+void Game::spawn_dude(b2Vec2 position) {
     // body
     b2BodyDef body_def;
     body_def.type = b2_dynamicBody;
-    body_def.position.Set(x, y);
+    body_def.position.Set(position.x, position.y);
     b2Body *body = this->b2_world.CreateBody(&body_def);
 
     // mass data
@@ -176,6 +212,7 @@ void Game::spawn_dude(float x, float y, float speed) {
     fixture_def.shape = &shape;
     body->CreateFixture(&fixture_def);
 
-    Dude dude(body, speed);
+    // dude
+    Dude dude(body, 0.5, 16, DEG2RAD * 70.0, 5.0);
     this->dudes.push_back(dude);
 }
