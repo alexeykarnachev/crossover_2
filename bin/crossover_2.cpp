@@ -2,59 +2,128 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "raylib.h"
+#include "raymath.h"
 #include <Eigen/Dense>
-#include <iostream>
 #include <GLFW/glfw3.h>
-
+#include <iostream>
 
 #define SCREEN_WIDTH 1024
 #define SCREEN_HEIGHT 768
 
-int main() {
-    std::cout << "Running...\n";
+// -----------------------------------------------------------------------
+// game camera
+class GameCamera {
+  private:
+    float zoom = 1.0;
+    Camera2D camera2d;
 
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "crossover_2");
+  public:
+    GameCamera(Vector2 screen_size);
+    void begin_mode_2d();
+    void end_mode_2d();
+};
+
+GameCamera::GameCamera(Vector2 screen_size) {
+    Vector2 offset = Vector2Scale(screen_size, 0.5);
+    this->camera2d = {
+        .offset = offset, .target = {0.0, 0.0}, .rotation = 0.0, .zoom = this->zoom};
+}
+
+void GameCamera::begin_mode_2d() {
+    BeginMode2D(this->camera2d);
+}
+
+void GameCamera::end_mode_2d() {
+    EndMode2D();
+}
+
+// -----------------------------------------------------------------------
+// game
+class Game {
+  private:
+    GameCamera camera;
+
+    float time;
+    float dt;
+
+    void update();
+    void draw();
+
+    void draw_world();
+    void draw_imgui();
+
+  public:
+    Game(Vector2 screen_size);
+    void run();
+};
+
+Game::Game(Vector2 screen_size)
+    : camera(screen_size) {
+    // init raylib window
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     SetTargetFPS(60);
+    InitWindow(screen_size.x, screen_size.y, "Game");
 
+    // init imgui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     GLFWwindow *window = (GLFWwindow *)GetWindowHandle();
     glfwGetWindowUserPointer(window);
-
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplOpenGL3_Init("#version 420 core");
     ImGui::StyleColorsDark();
-    bool show_another_window = true;
+}
 
-    Camera2D camera = {.offset = {SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0}, .target = {0.0, 0.0}, .rotation = 0.0, .zoom = 1.0};
+void Game::update() {
+    this->dt = GetFrameTime();
+    this->time += this->dt;
+}
 
-    while (!WindowShouldClose()) {
-        BeginDrawing();
+void Game::draw() {
+    BeginDrawing();
+    ClearBackground(BLACK);
 
+    this->draw_world();
+    this->draw_imgui();
 
-        BeginMode2D(camera);
-        ClearBackground(RAYWHITE);
-        DrawCircle(0.0, 0.0, 100.0, RED);
-        EndMode2D();
+    EndDrawing();
+}
 
-        // Start the Dear ImGui frame
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+void Game::draw_world() {
+    this->camera.begin_mode_2d();
+    DrawCircle(0.0, 0.0, 100.0, RED);
+    this->camera.end_mode_2d();
+}
 
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
+void Game::draw_imgui() {
+    // start imgui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        EndDrawing();
+    {
+        ImGui::Begin("Another Window", NULL);
+        ImGui::Text("Hello from another window!");
+        ImGui::End();
     }
+
+    // draw imgui frame
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Game::run() {
+    while (!WindowShouldClose()) {
+        this->update();
+        this->draw();
+    }
+}
+
+// -----------------------------------------------------------------------
+// main
+int main() {
+    Game game({SCREEN_WIDTH, SCREEN_HEIGHT});
+    game.run();
 }
 
 // // eigen test
