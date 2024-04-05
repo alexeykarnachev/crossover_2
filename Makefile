@@ -4,5 +4,5 @@ all:
 	./src/core.cpp \
 	./src/main.cpp \
 	-I./deps/include -L./deps/lib/linux \
-	-lraylib -limgui -lGL -lpthread -ldl \
+	-lraylib -limgui -lbox2d -lGL -lpthread -ldl \
 	-O2 -march=native
