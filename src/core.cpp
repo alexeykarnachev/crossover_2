@@ -1,28 +1,13 @@
+#include "core.hpp"
+
+#include "GLFW/glfw3.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "raylib.h"
 #include "raymath.h"
-#include <Eigen/Dense>
-#include <GLFW/glfw3.h>
-#include <iostream>
-
-#define SCREEN_WIDTH 1024
-#define SCREEN_HEIGHT 768
 
 // -----------------------------------------------------------------------
 // game camera
-class GameCamera {
-  private:
-    float zoom = 1.0;
-    Camera2D camera2d;
-
-  public:
-    GameCamera(Vector2 screen_size);
-    void begin_mode_2d();
-    void end_mode_2d();
-};
-
 GameCamera::GameCamera(Vector2 screen_size) {
     Vector2 offset = Vector2Scale(screen_size, 0.5);
     this->camera2d = {
@@ -38,25 +23,15 @@ void GameCamera::end_mode_2d() {
 }
 
 // -----------------------------------------------------------------------
+// dude
+Dude::Dude(Vector2 position, float radius)
+    : position(position)
+    , radius(radius){};
+
+void Dude::update(Game &game) {}
+
+// -----------------------------------------------------------------------
 // game
-class Game {
-  private:
-    GameCamera camera;
-
-    float time;
-    float dt;
-
-    void update();
-    void draw();
-
-    void draw_world();
-    void draw_imgui();
-
-  public:
-    Game(Vector2 screen_size);
-    void run();
-};
-
 Game::Game(Vector2 screen_size)
     : camera(screen_size) {
     // init raylib window
@@ -72,6 +47,15 @@ Game::Game(Vector2 screen_size)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 420 core");
     ImGui::StyleColorsDark();
+}
+
+Game::~Game() {
+    // close imgui
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    CloseWindow();
 }
 
 void Game::update() {
@@ -118,22 +102,3 @@ void Game::run() {
         this->draw();
     }
 }
-
-// -----------------------------------------------------------------------
-// main
-int main() {
-    Game game({SCREEN_WIDTH, SCREEN_HEIGHT});
-    game.run();
-}
-
-// // eigen test
-// // Define matrices
-// Eigen::MatrixXd A = Eigen::MatrixXd::Random(1000, 1000); // Random 1000x1000 matrix
-// Eigen::MatrixXd B = Eigen::MatrixXd::Random(1000, 1000); // Random 1000x1000 matrix
-// Eigen::MatrixXd C;
-
-// for (int i = 0; i < 10; ++i) {
-//     C = A * B;
-// }
-
-// std::cout << "Result of matrix multiplication:\n" << C << std::endl;
