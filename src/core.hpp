@@ -1,5 +1,6 @@
 #pragma once
 
+#include "box2d/b2_collision.h"
 #include <vector>
 #include "box2d/b2_body.h"
 #include "box2d/b2_world.h"
@@ -13,7 +14,7 @@ class GameCamera;
 // game camera
 class GameCamera {
   private:
-    float zoom = 1.0;
+    float zoom = 50.0;
     Camera2D camera2d;
 
   public:
@@ -28,10 +29,14 @@ class GameCamera {
 class Dude {
 private:
     b2Body* body;
+    float speed;
 
 public:
-    Dude(b2Body* body);
+    Dude(b2Body* body, float speed);
     void update(Game& game);
+
+    Vector2 get_body_position();
+    float get_body_radius();
 };
 
 // -----------------------------------------------------------------------
@@ -48,6 +53,7 @@ class Game {
     float timestep = 1.0 / 60.0;
 
     void update();
+    void step();
     void draw();
 
     void draw_world();
@@ -58,6 +64,6 @@ class Game {
     ~Game();
     void run();
 
-    void spawn_dude(float x, float y);
+    void spawn_dude(float x, float y, float speed);
 };
 

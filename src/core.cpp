@@ -31,19 +31,35 @@ void GameCamera::end_mode_2d() {
 
 // -----------------------------------------------------------------------
 // dude
-Dude::Dude(b2Body *body)
-    : body(body){};
+Dude::Dude(b2Body *body, float speed)
+    : body(body)
+    , speed(speed){};
 
-void Dude::update(Game &game) {}
+void Dude::update(Game &game) {
+    this->body->SetLinearVelocity({0.0f, this->speed});
+}
+
+Vector2 Dude::get_body_position() {
+    b2Vec2 b2_vec2 = this->body->GetPosition();
+    return {b2_vec2.x, b2_vec2.y};
+}
+
+float Dude::get_body_radius() {
+    b2Fixture *fixture = this->body->GetFixtureList();
+    b2Shape *shape = fixture->GetShape();
+    b2CircleShape *circle = static_cast<b2CircleShape *>(shape);
+    return circle->m_radius;
+}
 
 // -----------------------------------------------------------------------
 // game
 Game::Game(Vector2 screen_size)
     : b2_world({0.0f, 0.0f}) {
+
     // init raylib window
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     SetTargetFPS(60);
-    InitWindow(screen_size.x, screen_size.y, "Game");
+    InitWindow(screen_size.x, screen_size.y, "crossover_2");
 
     // init imgui
     IMGUI_CHECKVERSION();
@@ -69,15 +85,20 @@ Game::~Game() {
 void Game::update() {
     this->dt += GetFrameTime();
 
-    int i = 0;
     while (this->dt >= this->timestep) {
         this->dt -= this->timestep;
         this->time += this->timestep;
-
-        this->b2_world.Step(this->timestep, 8, 3);
-        i += 1;
+        this->step();
     }
-    std::cout << i << "\n";
+}
+
+void Game::step() {
+    this->b2_world.Step(this->timestep, 8, 3);
+
+    // update dudes
+    for (Dude &dude : this->dudes) {
+        dude.update(*this);
+    }
 }
 
 void Game::draw() {
@@ -94,7 +115,14 @@ void Game::draw() {
 
 void Game::draw_world() {
     this->camera.begin_mode_2d();
-    DrawCircle(0.0, 0.0, 100.0, RED);
+
+    // draw dudes
+    for (Dude &dude : this->dudes) {
+        Vector2 position = dude.get_body_position();
+        float radius = dude.get_body_radius();
+        DrawCircleV(position, radius, RED);
+    }
+
     this->camera.end_mode_2d();
 }
 
@@ -116,7 +144,8 @@ void Game::draw_imgui() {
 }
 
 void Game::run() {
-    this->spawn_dude(0.0, 0.0);
+    this->spawn_dude(0.0, 0.0, 2.0);
+    this->spawn_dude(0.0, 5.0, -2.0);
 
     while (!WindowShouldClose()) {
         this->update();
@@ -124,20 +153,29 @@ void Game::run() {
     }
 }
 
-void Game::spawn_dude(float x, float y) {
+void Game::spawn_dude(float x, float y, float speed) {
+    // body
     b2BodyDef body_def;
-    body_def.type = b2_staticBody;
+    body_def.type = b2_dynamicBody;
     body_def.position.Set(x, y);
     b2Body *body = this->b2_world.CreateBody(&body_def);
 
+    // mass data
+    b2MassData mass_data;
+    mass_data.center.SetZero();
+    mass_data.mass = 80.0;
+    mass_data.I = 0.0;
+    body->SetMassData(&mass_data);
+
+    // shape
     b2CircleShape shape;
     shape.m_p.Set(0.0, 0.0);
     shape.m_radius = 1.0;
 
-    b2FixtureDef myFixtureDef;
-    myFixtureDef.shape = &shape;
-    body->CreateFixture(&myFixtureDef);
+    b2FixtureDef fixture_def;
+    fixture_def.shape = &shape;
+    body->CreateFixture(&fixture_def);
 
-    Dude dude(body);
+    Dude dude(body, speed);
     this->dudes.push_back(dude);
 }
