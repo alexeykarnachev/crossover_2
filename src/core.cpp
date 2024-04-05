@@ -18,7 +18,7 @@ GameCamera::GameCamera(){};
 GameCamera::GameCamera(Vector2 screen_size) {
     Vector2 offset = Vector2Scale(screen_size, 0.5);
     this->camera2d = {
-        .offset = offset, .target = {0.0, 0.0}, .rotation = 0.0, .zoom = this->zoom};
+        .offset = offset, .target = {0.0, 0.0}, .rotation = 180.0, .zoom = this->zoom};
 }
 
 void GameCamera::begin_mode_2d() {
