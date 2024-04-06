@@ -19,11 +19,19 @@
 #define DEFAULT_BULLET_TTL 5.0
 #define DEFAULT_DUDE_RADIUS 1.0
 #define DEFAULT_DUDE_MAX_HEALTH 100.0
-#define DEFAULT_DUDE_MOVE_SPEED 3.0
+#define DEFAULT_DUDE_MOVE_SPEED 10.0
+
+class World;
+
+enum class AIType {
+    NONE,
+    MANUAL,
+};
 
 class Dude {
   public:
-    float radius = DEFAULT_DUDE_RADIUS;
+    AIType ai_type;
+    float body_radius = DEFAULT_DUDE_RADIUS;
     float max_health = DEFAULT_DUDE_MAX_HEALTH;
     float move_speed = DEFAULT_DUDE_MOVE_SPEED;
 
@@ -32,7 +40,8 @@ class Dude {
 
     Dude() = default;
 
-    Dude(Vector2 position) {
+    Dude(Vector2 position, AIType ai_type) {
+        this->ai_type = ai_type;
         this->position = position;
         this->health = this->max_health;
     };
@@ -40,6 +49,9 @@ class Dude {
     bool check_if_can_be_deleted() {
         return this->health <= 0.0;
     }
+
+    void update(World &world);
+    void draw();
 };
 
 class Bullet {
@@ -99,15 +111,19 @@ class World {
     World(){};
     ~World(){};
 
-    void update() {}
+    void update() {
+        for (Dude &dude : this->dudes) {
+            dude.update(*this);
+        }
+    }
 
-    void spawn_dude(Vector2 position) {
+    void spawn_dude(Vector2 position, AIType ai_type) {
         int idx = find_free_index(this->dudes, MAX_N_DUDES);
         if (idx == -1) {
             throw std::runtime_error("ERROR: Can't spawn more dudes");
         }
 
-        this->dudes[idx] = Dude(position);
+        this->dudes[idx] = Dude(position, ai_type);
     }
 
     void spawn_bullet(Vector2 position, Dude *owner) {
@@ -151,9 +167,7 @@ class Renderer {
         BeginMode2D(world.camera.camera2d);
 
         for (Dude &dude : world.dudes) {
-            if (dude.check_if_can_be_deleted()) continue;
-
-            DrawCircleV(dude.position, dude.radius, RED);
+            dude.draw();
         }
 
         EndMode2D();
@@ -163,14 +177,43 @@ class Renderer {
     }
 };
 
+void Dude::draw() {
+    if (this->check_if_can_be_deleted()) return;
+
+    DrawCircleV(this->position, this->body_radius, RED);
+}
+
+void Dude::update(World &world) {
+    if (this->check_if_can_be_deleted()) return;
+
+    switch (this->ai_type) {
+        case AIType::MANUAL: {
+            Vector2 dir = Vector2Zero();
+            if (IsKeyDown(KEY_W)) dir.y -= 1.0;
+            if (IsKeyDown(KEY_S)) dir.y += 1.0;
+            if (IsKeyDown(KEY_A)) dir.x -= 1.0;
+            if (IsKeyDown(KEY_D)) dir.x += 1.0;
+
+            if (dir.x != 0.0 || dir.y != 0.0) {
+                float dist = world.timestep * this->move_speed;
+                Vector2 step = Vector2Scale(Vector2Normalize(dir), dist);
+                this->position = Vector2Add(this->position, step);
+            }
+
+            break;
+        }
+        default: break;
+    }
+}
+
 void start_game() {
     Renderer renderer(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     World world;
     world.camera = GameCamera(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    world.spawn_dude({0.0, 0.0});
-    world.spawn_dude({10.0, 10.0});
+    world.spawn_dude({0.0, 0.0}, AIType::MANUAL);
+    world.spawn_dude({10.0, 10.0}, AIType::NONE);
 
     float accum_frame_time = 0.0;
     while (!WindowShouldClose()) {
