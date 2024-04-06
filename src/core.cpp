@@ -20,7 +20,7 @@ GameCamera::GameCamera(int screen_width, int screen_height) {
     this->camera2d = {
         .offset = {0.5f * screen_width, 0.5f * screen_height},
         .target = {0.0, 0.0},
-        .rotation = 180.0,
+        .rotation = 0.0,
         .zoom = this->zoom};
 }
 
@@ -35,40 +35,77 @@ void GameCamera::end_mode_2d() {
 // -----------------------------------------------------------------------
 // dude
 Dude::Dude(
-    b2Body *body, float speed, int n_view_rays, float view_angle, float view_distance
+    DudeType type,
+    b2Body *body,
+    float move_speed,
+    float rotate_speed,
+    int n_view_rays,
+    float view_angle,
+    float view_distance
 )
-    : body(body)
+    : type(type)
+    , body(body)
+    , move_speed(move_speed)
+    , rotate_speed(rotate_speed)
     , n_view_rays(n_view_rays)
     , view_angle(view_angle)
-    , view_distance(view_distance)
-    , speed(speed){};
+    , view_distance(view_distance) {}
 
 void Dude::update(Game &game) {
-    this->body->SetLinearVelocity({0.0f, this->speed});
-    this->body->SetAngularVelocity(180.0 * DEG2RAD);
+    b2Vec2 position = this->body->GetPosition();
+    float angle = this->body->GetAngle();
+
+    switch (this->type) {
+        case DudeType::PLAYER:
+            // move
+            b2Vec2 linear_velocity = {0.0, 0.0};
+
+            if (IsKeyDown(KEY_W)) linear_velocity.y -= 1.0;
+            if (IsKeyDown(KEY_S)) linear_velocity.y += 1.0;
+            if (IsKeyDown(KEY_A)) linear_velocity.x -= 1.0;
+            if (IsKeyDown(KEY_D)) linear_velocity.x += 1.0;
+
+            if (linear_velocity.Normalize() > EPSILON)
+                linear_velocity *= this->move_speed;
+            else linear_velocity.SetZero();
+            this->body->SetLinearVelocity(linear_velocity);
+
+            // rotate
+            Vector2 screen_mouse_position = GetMousePosition();
+            Vector2 world_mouse_position = GetScreenToWorld2D(
+                screen_mouse_position, game.camera.camera2d
+            );
+            float target_angle = Vector2Angle(
+                {1.0, 0.0},
+                {world_mouse_position.x - position.x, world_mouse_position.y - position.y}
+            );
+            this->body->SetTransform(position, target_angle);
+
+            break;
+    }
 }
 
-b2Vec2 Dude::get_body_position() {
-    return this->body->GetPosition();
-}
+void Dude::draw_debug() {
+    b2Vec2 position = this->body->GetPosition();
 
-float Dude::get_body_angle() {
-    return this->body->GetAngle();
-}
-
-float Dude::get_body_radius() {
     b2Fixture *fixture = this->body->GetFixtureList();
     b2Shape *shape = fixture->GetShape();
     b2CircleShape *circle = static_cast<b2CircleShape *>(shape);
-    return circle->m_radius;
+    float radius = circle->m_radius;
+
+    DrawCircleV({position.x, position.y}, radius, RED);
+
+    for (auto point : this->get_view_ray_end_points()) {
+        DrawLineV({position.x, position.y}, {point.x, point.y}, GREEN);
+    }
 }
 
 std::vector<b2Vec2> Dude::get_view_ray_end_points() {
     std::vector<b2Vec2> rays;
 
-    b2Vec2 origin = this->get_body_position();
-    float angle = this->get_body_angle();
-    Vector2 first_ray = Vector2Rotate({0.0, this->view_distance}, angle);
+    b2Vec2 origin = this->body->GetPosition();
+    float angle = this->body->GetAngle();
+    Vector2 first_ray = Vector2Rotate({this->view_distance, 0.0}, angle);
 
     if (this->n_view_rays == 1) {
         rays.push_back({first_ray.x + origin.x, first_ray.y + origin.y});
@@ -151,13 +188,7 @@ void Game::draw_world() {
 
     // draw dudes
     for (Dude &dude : this->dudes) {
-        b2Vec2 position = dude.get_body_position();
-        float radius = dude.get_body_radius();
-        DrawCircleV({position.x, position.y}, radius, RED);
-
-        for (auto point : dude.get_view_ray_end_points()) {
-            DrawLineV({position.x, position.y}, {point.x, point.y}, GREEN);
-        }
+        dude.draw_debug();
     }
 
     this->camera.end_mode_2d();
@@ -213,6 +244,6 @@ void Game::spawn_dude(b2Vec2 position) {
     body->CreateFixture(&fixture_def);
 
     // dude
-    Dude dude(body, 0.5, 16, DEG2RAD * 70.0, 5.0);
+    Dude dude(DudeType::PLAYER, body, 5.0, 4.0, 16, DEG2RAD * 70.0, 5.0);
     this->dudes.push_back(dude);
 }
