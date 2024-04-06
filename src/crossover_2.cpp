@@ -1,4 +1,3 @@
-
 #include "GLFW/glfw3.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -36,6 +35,7 @@ class Dude {
     float move_speed = DEFAULT_DUDE_MOVE_SPEED;
 
     Vector2 position;
+    float rotation = 0.0;
     float health = 0.0;
 
     Dude() = default;
@@ -57,19 +57,25 @@ class Dude {
 class Bullet {
   public:
     Vector2 position;
-    Dude *owner;
-    float ttl = DEFAULT_BULLET_TTL;
+    Vector2 velocity;
+    Dude *owner = NULL;
+    float ttl = 0.0;
 
     Bullet() = default;
 
-    Bullet(Vector2 position, Dude *owner) {
+    Bullet(Vector2 position, Vector2 velocity, Dude *owner) {
         this->position = position;
+        this->velocity = velocity;
         this->owner = owner;
+        this->ttl = DEFAULT_BULLET_TTL;
     };
 
     bool check_if_can_be_deleted() {
         return ttl <= 0.0;
     }
+
+    void update(World &world);
+    void draw();
 };
 
 class GameCamera {
@@ -115,24 +121,28 @@ class World {
         for (Dude &dude : this->dudes) {
             dude.update(*this);
         }
+
+        for (Bullet &bullet : this->bullets) {
+            bullet.update(*this);
+        }
     }
 
-    void spawn_dude(Vector2 position, AIType ai_type) {
+    void spawn_dude(Dude dude) {
         int idx = find_free_index(this->dudes, MAX_N_DUDES);
         if (idx == -1) {
             throw std::runtime_error("ERROR: Can't spawn more dudes");
         }
 
-        this->dudes[idx] = Dude(position, ai_type);
+        this->dudes[idx] = dude;
     }
 
-    void spawn_bullet(Vector2 position, Dude *owner) {
+    void spawn_bullet(Bullet bullet) {
         int idx = find_free_index(this->bullets, MAX_N_BULLETS);
         if (idx == -1) {
             fprintf(stderr, "WARNING: Can't spawn more bullets");
         }
 
-        this->bullets[idx] = Bullet(position, owner);
+        this->bullets[idx] = bullet;
     }
 };
 
@@ -162,12 +172,16 @@ class Renderer {
 
     void draw(World &world) {
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground(DARKBLUE);
 
         BeginMode2D(world.camera.camera2d);
 
         for (Dude &dude : world.dudes) {
             dude.draw();
+        }
+
+        for (Bullet &bullet : world.bullets) {
+            bullet.draw();
         }
 
         EndMode2D();
@@ -176,12 +190,6 @@ class Renderer {
         EndDrawing();
     }
 };
-
-void Dude::draw() {
-    if (this->check_if_can_be_deleted()) return;
-
-    DrawCircleV(this->position, this->body_radius, RED);
-}
 
 void Dude::update(World &world) {
     if (this->check_if_can_be_deleted()) return;
@@ -200,10 +208,34 @@ void Dude::update(World &world) {
                 this->position = Vector2Add(this->position, step);
             }
 
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                world.spawn_bullet({this->position, {0.0, 10.0}, this});
+            }
+
             break;
         }
         default: break;
     }
+}
+
+void Bullet::update(World &world) {
+    if (this->check_if_can_be_deleted()) return;
+    this->ttl -= world.timestep;
+
+    Vector2 step = Vector2Scale(this->velocity, world.timestep);
+    this->position = Vector2Add(this->position, step);
+}
+
+void Dude::draw() {
+    if (this->check_if_can_be_deleted()) return;
+
+    DrawCircleV(this->position, this->body_radius, RED);
+}
+
+void Bullet::draw() {
+    if (this->check_if_can_be_deleted()) return;
+
+    DrawCircleV(this->position, 0.1, YELLOW);
 }
 
 void start_game() {
@@ -212,8 +244,8 @@ void start_game() {
     World world;
     world.camera = GameCamera(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    world.spawn_dude({0.0, 0.0}, AIType::MANUAL);
-    world.spawn_dude({10.0, 10.0}, AIType::NONE);
+    world.spawn_dude({{0.0, 0.0}, AIType::MANUAL});
+    world.spawn_dude({{10.0, 10.0}, AIType::NONE});
 
     float accum_frame_time = 0.0;
     while (!WindowShouldClose()) {
