@@ -1,8 +1,8 @@
 all:
 	g++ \
+	-std=c++17 \
 	-o ./build/linux/crossover_2 \
-	./src/core.cpp \
-	./src/main.cpp \
+	./src/crossover_2.cpp \
 	-I./deps/include -L./deps/lib/linux \
-	-lraylib -limgui -lbox2d -lGL -lpthread -ldl \
+	-lraylib -limgui -lGL -lpthread -ldl \
 	-O2 -march=native
