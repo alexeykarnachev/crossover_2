@@ -18,7 +18,7 @@ class GameCamera;
 // game camera
 class GameCamera {
   public:
-    float zoom = 50.0;
+    float zoom = 25.0;
     Camera2D camera2d;
 
     GameCamera();
@@ -30,7 +30,8 @@ class GameCamera {
 // -----------------------------------------------------------------------
 // dude controller
 enum class DudeType {
-    PLAYER
+    PLAYER,
+    SIMPLE_AI,
 };
 
 // -----------------------------------------------------------------------
@@ -69,6 +70,7 @@ public:
 class Game {
   public:
     b2World b2_world;
+    b2Body* ground_body;
 
     GameCamera camera;
     std::vector<Dude> dudes;
@@ -88,6 +90,6 @@ class Game {
     void draw_world();
     void draw_imgui();
 
-    void spawn_dude(b2Vec2 position);
+    void spawn_dude(DudeType type, b2Vec2 position);
 };
 

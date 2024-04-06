@@ -1,8 +1,10 @@
 #include "core.hpp"
 
 #include "GLFW/glfw3.h"
+#include "box2d/b2_body.h"
 #include "box2d/b2_circle_shape.h"
 #include "box2d/b2_fixture.h"
+#include "box2d/b2_friction_joint.h"
 #include "box2d/b2_math.h"
 #include "box2d/b2_polygon_shape.h"
 #include "imgui.h"
@@ -55,33 +57,30 @@ void Dude::update(Game &game) {
     b2Vec2 position = this->body->GetPosition();
     float angle = this->body->GetAngle();
 
-    switch (this->type) {
-        case DudeType::PLAYER:
-            // move
-            b2Vec2 linear_velocity = {0.0, 0.0};
+    if (this->type == DudeType::PLAYER) {
+        // move
+        b2Vec2 linear_velocity = {0.0, 0.0};
 
-            if (IsKeyDown(KEY_W)) linear_velocity.y -= 1.0;
-            if (IsKeyDown(KEY_S)) linear_velocity.y += 1.0;
-            if (IsKeyDown(KEY_A)) linear_velocity.x -= 1.0;
-            if (IsKeyDown(KEY_D)) linear_velocity.x += 1.0;
+        if (IsKeyDown(KEY_W)) linear_velocity.y -= 1.0;
+        if (IsKeyDown(KEY_S)) linear_velocity.y += 1.0;
+        if (IsKeyDown(KEY_A)) linear_velocity.x -= 1.0;
+        if (IsKeyDown(KEY_D)) linear_velocity.x += 1.0;
 
-            if (linear_velocity.Normalize() > EPSILON)
-                linear_velocity *= this->move_speed;
-            else linear_velocity.SetZero();
-            this->body->SetLinearVelocity(linear_velocity);
+        if (linear_velocity.Normalize() > EPSILON) linear_velocity *= this->move_speed;
+        else linear_velocity.SetZero();
+        this->body->SetLinearVelocity(linear_velocity);
 
-            // rotate
-            Vector2 screen_mouse_position = GetMousePosition();
-            Vector2 world_mouse_position = GetScreenToWorld2D(
-                screen_mouse_position, game.camera.camera2d
-            );
-            float target_angle = Vector2Angle(
-                {1.0, 0.0},
-                {world_mouse_position.x - position.x, world_mouse_position.y - position.y}
-            );
-            this->body->SetTransform(position, target_angle);
-
-            break;
+        // rotate
+        Vector2 screen_mouse_position = GetMousePosition();
+        Vector2 world_mouse_position = GetScreenToWorld2D(
+            screen_mouse_position, game.camera.camera2d
+        );
+        float target_angle = Vector2Angle(
+            {1.0, 0.0},
+            {world_mouse_position.x - position.x, world_mouse_position.y - position.y}
+        );
+        this->body->SetTransform(position, target_angle);
+    } else if (this->type == DudeType::SIMPLE_AI) {
     }
 }
 
@@ -124,7 +123,8 @@ std::vector<b2Vec2> Dude::get_view_ray_end_points() {
 // -----------------------------------------------------------------------
 // game
 Game::Game(int screen_width, int screen_height)
-    : b2_world({0.0f, 0.0f}) {
+    : b2_world({0.0f, 0.0f})
+    , camera(GameCamera(screen_width, screen_height)) {
 
     // init raylib window
     SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -140,7 +140,21 @@ Game::Game(int screen_width, int screen_height)
     ImGui_ImplOpenGL3_Init("#version 420 core");
     ImGui::StyleColorsDark();
 
-    this->camera = GameCamera(screen_width, screen_height);
+    // -------------------------------------------------------------------
+    // create ground body (for friction joints)
+    b2BodyDef ground_body_def;
+    ground_body_def.position.Set(0.0f, 0.0f);
+    this->ground_body = this->b2_world.CreateBody(&ground_body_def);
+    this->ground_body->SetType(b2_staticBody);
+
+    b2PolygonShape ground_shape;
+    ground_shape.SetAsBox(0.0, 0.0);
+
+    // Create fixture for the ground
+    b2FixtureDef ground_fixture_def;
+    ground_fixture_def.shape = &ground_shape;
+    ground_fixture_def.isSensor = true;
+    this->ground_body->CreateFixture(&ground_fixture_def);
 }
 
 Game::~Game() {
@@ -212,7 +226,8 @@ void Game::draw_imgui() {
 }
 
 void Game::run() {
-    this->spawn_dude({0.0, 0.0});
+    this->spawn_dude(DudeType::PLAYER, {0.0, 0.0});
+    this->spawn_dude(DudeType::SIMPLE_AI, {0.0, 6.0});
 
     while (!WindowShouldClose()) {
         this->update();
@@ -220,19 +235,13 @@ void Game::run() {
     }
 }
 
-void Game::spawn_dude(b2Vec2 position) {
+void Game::spawn_dude(DudeType type, b2Vec2 position) {
     // body
     b2BodyDef body_def;
     body_def.type = b2_dynamicBody;
     body_def.position.Set(position.x, position.y);
+    body_def.fixedRotation = true;
     b2Body *body = this->b2_world.CreateBody(&body_def);
-
-    // mass data
-    b2MassData mass_data;
-    mass_data.center.SetZero();
-    mass_data.mass = 80.0;
-    mass_data.I = 0.0;
-    body->SetMassData(&mass_data);
 
     // shape
     b2CircleShape shape;
@@ -241,9 +250,20 @@ void Game::spawn_dude(b2Vec2 position) {
 
     b2FixtureDef fixture_def;
     fixture_def.shape = &shape;
+    fixture_def.density = 1.0;
     body->CreateFixture(&fixture_def);
 
+    // friction joint
+    b2FrictionJointDef joint_def;
+    joint_def.bodyA = this->ground_body;
+    joint_def.bodyB = body;
+    joint_def.localAnchorA.SetZero();
+    joint_def.localAnchorB.SetZero();
+    joint_def.collideConnected = false;
+    joint_def.maxForce = 100.0;
+    this->b2_world.CreateJoint(&joint_def);
+
     // dude
-    Dude dude(DudeType::PLAYER, body, 5.0, 4.0, 16, DEG2RAD * 70.0, 5.0);
+    Dude dude(type, body, 5.0, 4.0, 16, DEG2RAD * 70.0, 5.0);
     this->dudes.push_back(dude);
 }
