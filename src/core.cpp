@@ -12,7 +12,30 @@
 #include "imgui_impl_opengl3.h"
 #include "raylib.h"
 #include "raymath.h"
+#include <cstdio>
 #include <iostream>
+
+// -----------------------------------------------------------------------
+// utils
+static void draw_body_debug(b2Body *body, Color color) {
+    if (!body) {
+        fprintf(stderr, "WARNING: Can't draw NULL body\n");
+        return;
+    } else if (!body->IsEnabled()) {
+        fprintf(stderr, "WARNING: Can't draw disabled body\n");
+        return;
+    }
+
+    b2Vec2 position = body->GetPosition();
+
+    b2Fixture *fixture = body->GetFixtureList();
+    b2Shape *shape = fixture->GetShape();
+    if (shape->GetType() == b2Shape::e_circle) {
+        b2CircleShape *circle = static_cast<b2CircleShape *>(shape);
+        float radius = circle->m_radius;
+        DrawCircleV({position.x, position.y}, radius, color);
+    }
+}
 
 // -----------------------------------------------------------------------
 // game camera
@@ -32,6 +55,21 @@ void GameCamera::begin_mode_2d() {
 
 void GameCamera::end_mode_2d() {
     EndMode2D();
+}
+
+// -----------------------------------------------------------------------
+// bullet
+Bullet::Bullet(){};
+Bullet::Bullet(b2Body *body)
+    : body(body){};
+
+void Bullet::update(Game &game) {
+    this->ttl -= game.timestep;
+    if (this->ttl <= 0.0) this->body->SetEnabled(false);
+}
+
+void Bullet::draw_debug() {
+    draw_body_debug(this->body, YELLOW);
 }
 
 // -----------------------------------------------------------------------
@@ -66,8 +104,11 @@ void Dude::update(Game &game) {
         if (IsKeyDown(KEY_A)) linear_velocity.x -= 1.0;
         if (IsKeyDown(KEY_D)) linear_velocity.x += 1.0;
 
-        if (linear_velocity.Normalize() > EPSILON) linear_velocity *= this->move_speed;
-        else linear_velocity.SetZero();
+        if (linear_velocity.Normalize() > EPSILON) {
+            linear_velocity *= this->move_speed;
+        } else {
+            linear_velocity.SetZero();
+        }
         this->body->SetLinearVelocity(linear_velocity);
 
         // rotate
@@ -75,25 +116,23 @@ void Dude::update(Game &game) {
         Vector2 world_mouse_position = GetScreenToWorld2D(
             screen_mouse_position, game.camera.camera2d
         );
-        float target_angle = Vector2Angle(
-            {1.0, 0.0},
-            {world_mouse_position.x - position.x, world_mouse_position.y - position.y}
-        );
+        Vector2 dir = {
+            world_mouse_position.x - position.x, world_mouse_position.y - position.y};
+        float target_angle = Vector2Angle({1.0, 0.0}, dir);
         this->body->SetTransform(position, target_angle);
+
+        // shoot
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            game.spawn_bullet(position, {dir.x, dir.y});
+        }
     } else if (this->type == DudeType::SIMPLE_AI) {
     }
 }
 
 void Dude::draw_debug() {
+    draw_body_debug(this->body, RED);
+
     b2Vec2 position = this->body->GetPosition();
-
-    b2Fixture *fixture = this->body->GetFixtureList();
-    b2Shape *shape = fixture->GetShape();
-    b2CircleShape *circle = static_cast<b2CircleShape *>(shape);
-    float radius = circle->m_radius;
-
-    DrawCircleV({position.x, position.y}, radius, RED);
-
     for (auto point : this->get_view_ray_end_points()) {
         DrawLineV({position.x, position.y}, {point.x, point.y}, GREEN);
     }
@@ -174,6 +213,23 @@ void Game::update() {
         this->time += this->timestep;
         this->step();
     }
+
+    // destroy bullets
+    int free_idx = -1;
+    for (int i = 0; i < this->bullets.size(); ++i) {
+        Bullet &bullet = this->bullets[i];
+        if (!bullet.body->IsEnabled() && free_idx == -1) {
+            free_idx = i;
+        } else if (bullet.body->IsEnabled() && free_idx != -1) {
+            if (!this->bullets[free_idx].body->IsEnabled()) {
+                this->b2_world.DestroyBody(this->bullets[free_idx].body);
+            }
+            this->bullets[free_idx++] = bullet;
+        }
+    }
+    if (free_idx != -1) {
+        this->bullets.resize(free_idx);
+    }
 }
 
 void Game::step() {
@@ -182,6 +238,11 @@ void Game::step() {
     // update dudes
     for (Dude &dude : this->dudes) {
         dude.update(*this);
+    }
+
+    // update bullets
+    for (Bullet &bullet : this->bullets) {
+        bullet.update(*this);
     }
 }
 
@@ -203,6 +264,11 @@ void Game::draw_world() {
     // draw dudes
     for (Dude &dude : this->dudes) {
         dude.draw_debug();
+    }
+
+    // draw bullets
+    for (Bullet &bullet : this->bullets) {
+        bullet.draw_debug();
     }
 
     this->camera.end_mode_2d();
@@ -266,4 +332,30 @@ void Game::spawn_dude(DudeType type, b2Vec2 position) {
     // dude
     Dude dude(type, body, 5.0, 4.0, 16, DEG2RAD * 70.0, 5.0);
     this->dudes.push_back(dude);
+}
+
+void Game::spawn_bullet(b2Vec2 position, b2Vec2 direction) {
+    // body
+    b2BodyDef body_def;
+    body_def.type = b2_kinematicBody;
+    body_def.position.Set(position.x, position.y);
+    b2Body *body = this->b2_world.CreateBody(&body_def);
+    body->SetBullet(true);
+
+    // set bullet velocity
+    direction.Normalize();
+    body->SetLinearVelocity({direction.x * BULLET_SPEED, direction.y * BULLET_SPEED});
+
+    // shape
+    b2CircleShape shape;
+    shape.m_p.Set(0.0, 0.0);
+    shape.m_radius = 0.1;
+
+    b2FixtureDef fixture_def;
+    fixture_def.shape = &shape;
+    fixture_def.isSensor = true;
+    body->CreateFixture(&fixture_def);
+
+    Bullet bullet(body);
+    this->bullets.push_back(bullet);
 }

@@ -8,10 +8,14 @@
 #include "box2d/b2_world.h"
 #include "raylib.h"
 
+#define BULLET_TTL 5.0f
+#define BULLET_SPEED 20.0f
+
 enum class DudeType;
 
 class Game;
 class Dude;
+class Bullet;
 class GameCamera;
 
 // -----------------------------------------------------------------------
@@ -58,11 +62,25 @@ public:
         float view_angle,
         float view_distance
     );
-    void update(Game& game);
 
+    void update(Game& game);
     void draw_debug();
 
     std::vector<b2Vec2> get_view_ray_end_points();
+};
+
+// -----------------------------------------------------------------------
+// bullet
+class Bullet {
+public:
+    b2Body* body;
+    float ttl = BULLET_TTL;
+
+    Bullet();
+    Bullet(b2Body* body);
+
+    void update(Game& game);
+    void draw_debug();
 };
 
 // -----------------------------------------------------------------------
@@ -74,6 +92,7 @@ class Game {
 
     GameCamera camera;
     std::vector<Dude> dudes;
+    std::vector<Bullet> bullets;
 
     float dt = 0.0;
     float time = 0.0;
@@ -91,5 +110,6 @@ class Game {
     void draw_imgui();
 
     void spawn_dude(DudeType type, b2Vec2 position);
+    void spawn_bullet(b2Vec2 position, b2Vec2 direction);
 };
 
