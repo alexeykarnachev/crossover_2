@@ -22,11 +22,13 @@
 #define MAX_N_DUDES 16
 #define MAX_N_BULLETS 256
 #define MAX_N_OBSTACLES 256
-#define DEFAULT_BULLET_TTL 5.0
+#define DEFAULT_BULLET_TTL 2.0
 #define DEFAULT_BULLET_SPEED 50.0
+#define DEFAULT_BULLET_DAMAGE 1.0
 #define DEFAULT_DUDE_RADIUS 1.0
-#define DEFAULT_DUDE_MAX_HEALTH 100.0
+#define DEFAULT_DUDE_MAX_HEALTH 5.0
 #define DEFAULT_DUDE_MOVE_SPEED 10.0
+#define DEFAULT_DUDE_FIRE_RATE 5.0
 
 class World;
 
@@ -42,10 +44,12 @@ class Dude {
     float body_radius = DEFAULT_DUDE_RADIUS;
     float max_health = DEFAULT_DUDE_MAX_HEALTH;
     float move_speed = DEFAULT_DUDE_MOVE_SPEED;
+    float fire_rate = DEFAULT_DUDE_FIRE_RATE;
 
     Vector2 position;
     float orientation = 0.0;
     float health = 0.0;
+    float last_shot_time = -FLT_MAX;
 
     Dude() = default;
 
@@ -66,6 +70,7 @@ class Bullet {
     Vector2 velocity;
     Dude *owner = NULL;
     float ttl = 0.0;
+    float damage = DEFAULT_BULLET_DAMAGE;
 
     Bullet() = default;
 
@@ -111,6 +116,7 @@ class GameCamera {
 class World {
   public:
     float timestep = WORLD_TIMESTEP;
+    float time = 0.0;
 
     List<Dude, MAX_N_DUDES> dudes;
     List<Bullet, MAX_N_BULLETS> bullets;
@@ -122,6 +128,8 @@ class World {
     ~World(){};
 
     void update() {
+        this->time += this->timestep;
+
         for (Dude &dude : this->dudes) {
             dude.update(*this);
         }
@@ -200,6 +208,11 @@ class Renderer {
 };
 
 void Dude::update(World &world) {
+    if (this->health <= 0.0) {
+        world.dudes.remove(*this);
+        return;
+    }
+
     // update controls
     switch (this->ai_type) {
         case AIType::MANUAL: {
@@ -222,11 +235,15 @@ void Dude::update(World &world) {
                 Vector2Subtract(look_at, this->position)
             );
 
-            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            bool is_shot = IsMouseButtonDown(MOUSE_LEFT_BUTTON)
+                           && (world.time - this->last_shot_time)
+                                  >= 1.0 / this->fire_rate;
+            if (is_shot) {
                 Vector2 bullet_velocity = Vector2Scale(
                     get_orientation_vec(this->orientation), DEFAULT_BULLET_SPEED
                 );
                 world.spawn_bullet({this->position, bullet_velocity, this});
+                this->last_shot_time = world.time;
             }
 
             break;
@@ -257,6 +274,10 @@ void Dude::update(World &world) {
 
 void Bullet::update(World &world) {
     this->ttl -= world.timestep;
+    if (this->ttl <= 0.0) {
+        world.bullets.remove(*this);
+        return;
+    }
 
     Vector2 step = Vector2Scale(this->velocity, world.timestep);
     this->prev_position = this->curr_position;
@@ -286,6 +307,7 @@ void Bullet::update(World &world) {
             &intersection
         );
         if (is_hit) {
+            dude.health -= this->damage;
             world.bullets.remove(*this);
         }
     }
