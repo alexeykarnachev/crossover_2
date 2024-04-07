@@ -2,6 +2,8 @@
 
 #include "raylib.h"
 
+#define MAX_N_RAYS_IN_RAYS_FAN 64
+
 Vector2 get_orientation_vec(float orientation);
 float get_vec_orientation(Vector2 vec);
 Vector2 rotate_vec_90(Vector2 v);
@@ -27,4 +29,13 @@ int get_line_polygon_intersection_nearest(
 );
 int get_line_rect_intersection_nearest(
     Vector2 start, Vector2 end, Rectangle rect, Vector2 *intersection
+);
+
+typedef struct RaysFan {
+    int n;
+    Vector2 start;
+    Vector2 end[MAX_N_RAYS_IN_RAYS_FAN];
+} RaysFan;
+RaysFan get_rays_fan(
+    Vector2 start, int n, float length, float span_angle, float orientation
 );

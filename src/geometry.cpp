@@ -243,3 +243,28 @@ int get_line_rect_intersection_nearest(
     };
     return get_line_polygon_intersection_nearest(start, end, vertices, 4, intersection);
 }
+
+RaysFan get_rays_fan(
+    Vector2 start, int n, float length, float span_angle, float orientation
+) {
+    n = std::min(n, MAX_N_RAYS_IN_RAYS_FAN);
+
+    RaysFan fan;
+    fan.n = n;
+    fan.start = start;
+
+    Vector2 first_ray = Vector2Rotate({length, 0.0}, orientation);
+
+    if (n == 1) {
+        fan.end[0] = {first_ray.x + start.x, first_ray.y + start.y};
+    } else {
+        float step = span_angle / (n - 1);
+        for (int i = 0; i < n; ++i) {
+            float angle = -0.5 * span_angle + i * step;
+            Vector2 ray = Vector2Rotate(first_ray, angle);
+            fan.end[i] = {ray.x + start.x, ray.y + start.y};
+        }
+    }
+
+    return fan;
+}

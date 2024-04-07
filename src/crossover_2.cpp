@@ -29,6 +29,9 @@
 #define DEFAULT_DUDE_MAX_HEALTH 5.0
 #define DEFAULT_DUDE_MOVE_SPEED 10.0
 #define DEFAULT_DUDE_FIRE_RATE 5.0
+#define DEFAULT_DUDE_VIEW_DISTANCE 10.0
+#define DEFAULT_DUDE_VIEW_ANGLE (DEG2RAD * 75.0)
+#define DEFAULT_DUDE_N_VIEW_RAYS 32
 
 class World;
 
@@ -45,6 +48,10 @@ class Dude {
     float max_health = DEFAULT_DUDE_MAX_HEALTH;
     float move_speed = DEFAULT_DUDE_MOVE_SPEED;
     float fire_rate = DEFAULT_DUDE_FIRE_RATE;
+
+    float view_distance = DEFAULT_DUDE_VIEW_DISTANCE;
+    float view_angle = DEFAULT_DUDE_VIEW_ANGLE;
+    int n_view_rays = DEFAULT_DUDE_N_VIEW_RAYS;
 
     Vector2 position;
     float orientation = 0.0;
@@ -315,10 +322,24 @@ void Bullet::update(World &world) {
 
 void Dude::draw() {
     DrawCircleV(this->position, this->body_radius, RED);
+
+    // RaysFan get_rays_fan(Vector2 start, int n, float length, float span_angle, float
+    // orientation) {
+    RaysFan view_rays_fan = get_rays_fan(
+        this->position,
+        this->n_view_rays,
+        this->view_distance,
+        this->view_angle,
+        this->orientation
+    );
+    for (int i = 0; i < view_rays_fan.n; ++i) {
+        DrawLineV(this->position, view_rays_fan.end[i], GREEN);
+    }
 }
 
 void Bullet::draw() {
     DrawLineV(this->prev_position, this->curr_position, YELLOW);
+    DrawCircleV(this->curr_position, 0.1, ORANGE);
 }
 
 void Obstacle::draw() {
