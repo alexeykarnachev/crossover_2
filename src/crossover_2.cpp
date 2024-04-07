@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <iostream>
 #include <stdexcept>
@@ -41,6 +42,38 @@ enum class AIType {
     DUMMY,
 };
 
+enum class ViewRayTarget {
+    NONE,
+    DUDE,
+    OBSTACLE,
+};
+
+class ViewRayInfo {
+  public:
+    Vector2 origin;
+    Vector2 end_point;
+    ViewRayTarget target = ViewRayTarget::NONE;
+    float dist = FLT_MAX;
+
+    ViewRayInfo() = default;
+
+    void reset(Vector2 origin, Vector2 end_point) {
+        this->origin = origin;
+        this->end_point = end_point;
+        this->dist = FLT_MAX;
+        this->target = ViewRayTarget::NONE;
+    }
+
+    void hit(Vector2 hit_position, ViewRayTarget target) {
+        float dist = Vector2Distance(hit_position, this->origin);
+        if (this->target == ViewRayTarget::NONE || dist < this->dist) {
+            this->end_point = hit_position;
+            this->dist = dist;
+            this->target = target;
+        }
+    }
+};
+
 class Dude {
   public:
     AIType ai_type;
@@ -52,6 +85,7 @@ class Dude {
     float view_distance = DEFAULT_DUDE_VIEW_DISTANCE;
     float view_angle = DEFAULT_DUDE_VIEW_ANGLE;
     int n_view_rays = DEFAULT_DUDE_N_VIEW_RAYS;
+    std::array<ViewRayInfo, MAX_N_RAYS_IN_RAYS_FAN> view_ray_infos;
 
     Vector2 position;
     float orientation = 0.0;
@@ -191,7 +225,7 @@ class Renderer {
 
     void draw(World &world) {
         BeginDrawing();
-        ClearBackground(DARKBLUE);
+        ClearBackground({10, 10, 10, 255});
 
         BeginMode2D(world.camera.camera2d);
 
@@ -261,7 +295,8 @@ void Dude::update(World &world) {
         default: break;
     }
 
-    // resolve collisions with obstacles
+    // -------------------------------------------------------------------
+    // update collisions
     for (Obstacle &obstacle : world.obstacles) {
         Vector2 mtv = get_circle_rect_mtv(
             this->position, this->body_radius, obstacle.rect
@@ -269,13 +304,48 @@ void Dude::update(World &world) {
         this->position = Vector2Add(this->position, mtv);
     }
 
-    // resolve collisions with dudes
     for (Dude &dude : world.dudes) {
         if (&dude == this) continue;
         Vector2 mtv = get_circle_circle_mtv(
             this->position, this->body_radius, dude.position, dude.body_radius
         );
         this->position = Vector2Add(this->position, mtv);
+    }
+
+    // -------------------------------------------------------------------
+    // update view hits
+    RaysFan view_rays_fan = get_rays_fan(
+        this->position,
+        this->n_view_rays,
+        this->view_distance,
+        this->view_angle,
+        this->orientation
+    );
+    Vector2 hit_position;
+    for (int i = 0; i < view_rays_fan.n; ++i) {
+        Vector2 start = view_rays_fan.start;
+        Vector2 end = view_rays_fan.end[i];
+
+        ViewRayInfo &info = this->view_ray_infos[i];
+        info.reset(this->position, end);
+
+        for (Obstacle &obstacle : world.obstacles) {
+            if (get_line_rect_intersection_nearest(
+                    start, end, obstacle.rect, &hit_position
+                )) {
+                info.hit(hit_position, ViewRayTarget::OBSTACLE);
+            }
+        }
+
+        for (Dude &dude : world.dudes) {
+            if (&dude == this) continue;
+
+            if (get_line_circle_intersection_nearest(
+                    start, end, dude.position, dude.body_radius, &hit_position
+                )) {
+                info.hit(hit_position, ViewRayTarget::DUDE);
+            }
+        }
     }
 }
 
@@ -321,19 +391,16 @@ void Bullet::update(World &world) {
 }
 
 void Dude::draw() {
-    DrawCircleV(this->position, this->body_radius, RED);
+    DrawCircleV(this->position, this->body_radius, RAYWHITE);
 
-    // RaysFan get_rays_fan(Vector2 start, int n, float length, float span_angle, float
-    // orientation) {
-    RaysFan view_rays_fan = get_rays_fan(
-        this->position,
-        this->n_view_rays,
-        this->view_distance,
-        this->view_angle,
-        this->orientation
-    );
-    for (int i = 0; i < view_rays_fan.n; ++i) {
-        DrawLineV(this->position, view_rays_fan.end[i], GREEN);
+    for (int i = 0; i < this->n_view_rays; ++i) {
+        ViewRayInfo info = this->view_ray_infos[i];
+        DrawLineV(this->position, info.end_point, GREEN);
+        if (info.target == ViewRayTarget::OBSTACLE) {
+            DrawCircleV(info.end_point, 0.2, BLUE);
+        } else if (info.target == ViewRayTarget::DUDE) {
+            DrawCircleV(info.end_point, 0.2, RED);
+        }
     }
 }
 
