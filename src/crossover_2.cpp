@@ -313,7 +313,7 @@ void Dude::update(World &world) {
     }
 
     // -------------------------------------------------------------------
-    // update view hits
+    // update view ray infos
     RaysFan view_rays_fan = get_rays_fan(
         this->position,
         this->n_view_rays,
@@ -410,7 +410,7 @@ void Bullet::draw() {
 }
 
 void Obstacle::draw() {
-    DrawRectangleRec(this->rect, BROWN);
+    DrawRectangleRec(this->rect, {50, 50, 50, 255});
 }
 
 void start_game() {
